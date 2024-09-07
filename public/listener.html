@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Listener Page</title>
+</head>
+<body>
+    <h1>Listener Page</h1>
+    <p>This is the listener page.</p>
+    <video id="video" autoplay playsinline></video>
+    <script>
+        const video = document.getElementById('video');
+        const ws = new WebSocket('ws://localhost:4000');
+        let peerConnection;
+        const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+
+        ws.onopen = () => {
+            ws.send(JSON.stringify({ type: 'listener' }));
+        };
+
+        ws.onmessage = (event) => {
+            const message = JSON.parse(event.data);
+            if (message.type === 'answer') {
+                peerConnection.setRemoteDescription(new RTCSessionDescription(message.answer));
+            } else if (message.type === 'candidate') {
+                peerConnection.addIceCandidate(new RTCIceCandidate(message.candidate));
+            } else if (message.type === 'newListener') {
+                peerConnection = new RTCPeerConnection(config);
+                peerConnection.onicecandidate = (event) => {
+                    if (event.candidate) {
+                        ws.send(JSON.stringify({ type: 'candidate', candidate: event.candidate }));
+                    }
+                };
+                peerConnection.onaddstream = (event) => {
+                    video.srcObject = event.stream;
+                };
+                peerConnection.createOffer()
+                    .then(offer => {
+                        peerConnection.setLocalDescription(offer);
+                        ws.send(JSON.stringify({ type: 'offer', offer: offer }));
+                    });
+            }
+        };
+
+        ws.onclose = () => {
+            console.log('WebSocket connection closed');
+        };
+    </script>
+</body>
+</html>

@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Streamer Page</title>
+</head>
+<body>
+    <h1>Streamer Page</h1>
+    <p>Welcome to the streamer page!</p>
+    <video id="video" autoplay playsinline></video>
+    <script>
+        const video = document.getElementById('video');
+        const ws = new WebSocket('ws://localhost:4000');
+        let peerConnection;
+        const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+
+        navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+            .then(stream => {
+                video.srcObject = stream;
+                ws.onopen = () => {
+                    ws.send(JSON.stringify({ type: 'broadcaster' }));
+                };
+
+                ws.onmessage = (event) => {
+                    const message = JSON.parse(event.data);
+                    if (message.type === 'offer') {
+                        peerConnection = new RTCPeerConnection(config);
+                        peerConnection.addStream(stream);
+                        peerConnection.setRemoteDescription(new RTCSessionDescription(message.offer));
+                        peerConnection.createAnswer()
+                            .then(answer => {
+                                peerConnection.setLocalDescription(answer);
+                                ws.send(JSON.stringify({ type: 'answer', answer: answer }));
+                            });
+                        peerConnection.onicecandidate = (event) => {
+                            if (event.candidate) {
+                                ws.send(JSON.stringify({ type: 'candidate', candidate: event.candidate }));
+                            }
+                        };
+                    }
+                };
+            })
+            .catch(error => {
+                console.error('Error accessing media devices.', error);
+            });
+
+        ws.onclose = () => {
+            console.log('WebSocket connection closed');
+        };
+    </script>
+</body>
+</html>
